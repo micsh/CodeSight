@@ -1,6 +1,5 @@
 {
     "srcDirs": ["src"],
     "extensions": [".fs"],
-    "chunkerScript": "C:/Users/moshalal/source/repos/AITeam.Platform/tools/embeddings-poc/ts-chunker.js",
-    "embeddingUrl": "http://localhost:1234/v1/embeddings"
+    "chunkerScript": "parsers/ts-chunker.js"
 }

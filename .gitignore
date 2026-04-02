@@ -3,4 +3,4 @@ obj/
 .code-intel/
 *.user
 .vs/
-node_modules/
+parsers/node_modules/

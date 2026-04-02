@@ -9,6 +9,7 @@ let printUsage () =
     eprintfn "  code-sight index [--repo <path>]                     Build/update index"
     eprintfn "  code-sight modules [--repo <path>]                   Show project map"
     eprintfn "  code-sight search <js> [--repo <path>] [--scope <s>] Run a query"
+    eprintfn "  code-sight intel <question> [--repo <path>]          Ask about the codebase"
     eprintfn "  code-sight repl [--repo <path>] [--scope <s>]        Interactive mode"
     eprintfn "  code-sight scopes [--repo <path>]                    List available scopes"
     eprintfn ""
@@ -29,6 +30,13 @@ let parseArgs (args: string[]) =
             i <- i + 2
         | "index" | "modules" | "repl" | "scopes" ->
             command <- args.[i]
+            i <- i + 1
+        | "intel" when i + 1 < args.Length ->
+            command <- "intel"
+            query <- args.[i + 1]
+            i <- i + 2
+        | "intel" ->
+            command <- "intel"
             i <- i + 1
         | "search" when i + 1 < args.Length ->
             command <- "search"
@@ -167,7 +175,7 @@ let main args =
         for s in cfg.Scopes do
             eprintfn "  %-12s → %s" s.Name (s.Dirs |> String.concat ", ")
         0
-    | "modules" | "search" | "repl" ->
+    | "modules" | "search" | "repl" | "intel" ->
         let cfg = Config.load repo
         match IndexStore.load cfg.IndexDir with
         | None ->
@@ -234,6 +242,22 @@ let main args =
                         printfn "%s" (QueryEngine.eval engine (line.Trim()))
                         printfn ""
                 0
+            | "intel" ->
+                if query = "" then
+                    eprintfn "Usage: code-sight intel '<question>'"
+                    1
+                else
+                    // Ensure chunks loaded for the mini-agent's code_search calls
+                    engine <- QueryEngine.create index chunksRef.Value cfg.EmbeddingUrl
+                    let modulesCache = QueryEngine.eval engine "modules()"
+                    let playbooksDir =
+                        let candidate = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "playbooks")
+                        if Directory.Exists candidate then candidate
+                        else Path.Combine(repo, "playbooks")
+                    eprintfn "Playbook: %s → dispatching to mini-model..." (Intel.classifyPlaybook query)
+                    let result = Intel.run engine playbooksDir query modulesCache
+                    printfn "%s" result
+                    0
             | _ -> 1
     | "" ->
         printUsage()

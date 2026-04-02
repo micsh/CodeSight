@@ -10,6 +10,8 @@
   <ItemGroup>
     <PackageReference Include="Jint" Version="4.2.0" />
     <PackageReference Include="System.Numerics.Tensors" Version="9.0.3" />
+    <PackageReference Include="GitHub.Copilot.SDK" Version="*" />
+    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="*" />
   </ItemGroup>
 
   <ItemGroup>
@@ -21,6 +23,7 @@
     <Compile Include="src/Query/Format.fs" />
     <Compile Include="src/Query/Primitives.fs" />
     <Compile Include="src/Query/QueryEngine.fs" />
+    <Compile Include="src/Query/Intel.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
