@@ -155,8 +155,47 @@ let main args =
         runIndex cfg
         0
     | "modules" | "search" | "repl" ->
-        eprintfn "Command '%s' requires Stage 2 (query primitives). Use the FSX CLI for now." command
-        1
+        let cfg = Config.load repo
+        match IndexStore.load cfg.IndexDir with
+        | None ->
+            eprintfn "No index found. Run 'code-sight index' first."
+            1
+        | Some index ->
+            // Load source chunks for expand/grep/refs
+            let chunks =
+                let allFiles = TreeSitterChunker.findSourceFiles cfg
+                if allFiles.Length > 0 then Some (TreeSitterChunker.chunkFiles cfg allFiles)
+                else None
+            let engine = QueryEngine.create index chunks cfg.EmbeddingUrl
+
+            match command with
+            | "modules" ->
+                printfn "%s" (QueryEngine.eval engine "modules()")
+                0
+            | "search" ->
+                if query = "" then
+                    eprintfn "Usage: code-sight search '<js query>'"
+                    1
+                else
+                    printfn "%s" (QueryEngine.eval engine query)
+                    0
+            | "repl" ->
+                eprintfn "code-sight REPL. Type JS queries, 'quit' to exit."
+                eprintfn "  search(q,opts), refs(name,opts), grep(pattern,opts), modules(),"
+                eprintfn "  files(p?), context(file), expand(id), neighborhood(id,opts),"
+                eprintfn "  impact(type), imports(file), deps(pattern), similar(id,opts)"
+                eprintfn ""
+                let mutable running = true
+                while running do
+                    eprintf "> "
+                    let line = System.Console.ReadLine()
+                    if line = null || line.Trim() = "quit" || line.Trim() = "exit" then
+                        running <- false
+                    elif line.Trim() <> "" then
+                        printfn "%s" (QueryEngine.eval engine (line.Trim()))
+                        printfn ""
+                0
+            | _ -> 1
     | "" ->
         printUsage()
         0
