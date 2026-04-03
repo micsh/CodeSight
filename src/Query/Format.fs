@@ -19,7 +19,7 @@ module Format =
             box (arr |> Array.map normalize)
         | _ -> v
 
-    let formatValue (v: obj) : string =
+    let rec formatValue (v: obj) : string =
         let v = normalize v
         match v with
         | :? (IDictionary<string, obj>) as d ->
@@ -87,7 +87,11 @@ module Format =
                     lines.Add(sprintf "```\n%s\n```" code)
                 elif id <> "" then
                     lines.Add(sprintf "[%s] %s%s:%s (%s:%s)%s\n       %s%s%s" id score kind name file line sigStr summary matchLine preview)
-                else lines.Add(string v)
+                else
+                    // Unknown dict shape — serialize as key: value pairs
+                    for kv in d do
+                        let valStr = formatValue kv.Value
+                        lines.Add(sprintf "%s: %s" kv.Key valStr)
 
                 match d.TryGetValue("imports") with | true, (:? (string[]) as imps) when imps.Length > 0 -> lines.Add(sprintf "Imports: %s" (imps |> String.concat ", ")) | _ -> ()
                 match d.TryGetValue("dependents") with | true, (:? (string[]) as deps) when deps.Length > 0 -> lines.Add(sprintf "Dependents: %s" (deps |> String.concat ", ")) | _ -> ()
