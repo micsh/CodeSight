@@ -14,29 +14,31 @@ Produce an architecture and code quality review.
 
 ```js
 let m = modules();
-let r1 = refs("CodeIndex", {limit:30});
-let r2 = refs("CodeChunk", {limit:30});
+// Pick 2 types that appear in multiple modules' topTypes
+let types = m.flatMap(x => (x.topTypes || "").split(", ")).filter(t => t.length > 2);
+let counts = {};
+types.forEach(t => counts[t] = (counts[t] || 0) + 1);
+let top2 = Object.entries(counts).sort((a,b) => b[1] - a[1]).slice(0,2).map(x => x[0]);
+let r1 = top2[0] ? refs(top2[0], {limit:20}) : [];
+let r2 = top2[1] ? refs(top2[1], {limit:20}) : [];
 ({
   modules: m.map(x => ({name: x.module, files: x.files, chunks: x.chunks})),
-  backbone: {CodeIndex: r1.length, CodeChunk: r2.length}
+  backbone: [{type: top2[0], refs: r1.length}, {type: top2[1], refs: r2.length}]
 })
 ```
-
-Adapt type names to the actual codebase.
 
 ## Step 2: Duplication + complexity (one call)
 
 ```js
-let dup = grep("Array.tryFind.*FilePath.*Name.*StartLine", {limit:10});
 let big = files("").sort((a,b) => b.chunks - a.chunks).slice(0,5);
+// Look for common boilerplate patterns
+let dup = grep("TODO|HACK|FIXME|copy.paste|duplicat", {limit:5});
 ({
-  duplicatedPatterns: dup.map(d => ({name: d.name, file: d.file, matchLine: d.matchLine})),
-  largestFiles: big.map(f => ({file: f.file, chunks: f.chunks}))
+  largestFiles: big.map(f => ({file: f.file, chunks: f.chunks})),
+  possibleDuplication: dup.map(d => ({name: d.name, file: d.file, matchLine: d.matchLine}))
 })
 ```
 
-Adapt the grep pattern to look for repeated boilerplate in the codebase.
-
 ## Done
 
-2 calls. Assess and respond.
+2 calls. Assess architecture soundness, flag duplication, note complexity. Synthesize.

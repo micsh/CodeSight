@@ -22,40 +22,40 @@ let topModule = m.sort((a,b) => b.chunks - a.chunks)[0];
 })
 ```
 
-This gives you modules, file counts, and top types. You can already fill "Key modules" from this.
+This gives you the full module map. You can already fill "Key modules" from the names and types.
 
 ## Step 2: Find entry points (one call)
 
-Pick the module that looks like the app host (usually has "App" or "Program" in it):
+From Step 1, identify the module that looks like an app host or entry point. Then inspect its key files:
 
 ```js
-let p = context("Program.cs");
-let a = context("AppOrchestrator.cs");
+// Adapt these file names based on what you saw in Step 1
+let f1 = context("MAIN_FILE_HERE");
+let f2 = context("SECOND_FILE_HERE");
 ({
-  program: {chunks: p.chunks.length, imports: p.imports, first: p.chunks.slice(0,3).map(c => c.name + " L" + c.line)},
-  appOrch: {chunks: a.chunks.length, imports: a.imports, first: a.chunks.slice(0,3).map(c => c.name + " L" + c.line)}
+  file1: {name: "MAIN_FILE_HERE", chunks: f1.chunks.length, imports: f1.imports, top: f1.chunks.slice(0,3).map(c => c.name + " L" + c.line)},
+  file2: {name: "SECOND_FILE_HERE", chunks: f2.chunks.length, imports: f2.imports, top: f2.chunks.slice(0,3).map(c => c.name + " L" + c.line)}
 })
 ```
 
-If those files don't exist, adapt: search for the entry point with `search("main entry point startup", {limit:3})`.
+If you can't guess the file names, use `search("main entry point startup", {limit:3})` instead.
 
 ## Step 3: Confirm backbone types (one call)
 
-Pick 2-3 types that appeared in the modules data and check their reach:
+Pick 2-3 types from the `topTypes` in Step 1 that appear across modules:
 
 ```js
-let r1 = refs("Orchestrator", {limit:20});
-let r2 = refs("BoardRepository", {limit:20});
+// Adapt type names from what Step 1 returned
+let r1 = refs("TYPE_A", {limit:20});
+let r2 = refs("TYPE_B", {limit:20});
 ({
-  orchestrator: {refs: r1.length, files: [...new Set(r1.map(r => r.file))]},
-  boardRepo: {refs: r2.length, files: [...new Set(r2.map(r => r.file))]}
+  typeA: {refs: r1.length, files: [...new Set(r1.map(r => r.file))]},
+  typeB: {refs: r2.length, files: [...new Set(r2.map(r => r.file))]}
 })
 ```
 
-Adapt the type names based on what you found in Step 1.
-
 ## Done
 
-You should have enough to fill all 5 sections in 3 calls. Synthesize and respond.
+3 calls. Synthesize all 5 sections and respond.
 
-If a module looks unfamiliar, you may run ONE more call: `context("filename.fs")` on the most interesting file. But don't explore more than 4 calls total.
+If a module is unclear, you may run ONE more `context("file")` call. But stop at 4 total.

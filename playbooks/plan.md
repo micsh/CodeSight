@@ -13,21 +13,21 @@ Produce an implementation plan for a feature.
 ## Step 1: Find relevant code (one call)
 
 ```js
-let hits = search("your feature description here", {limit:8});
+// Replace FEATURE_DESCRIPTION with the user's actual request
+let hits = search("FEATURE_DESCRIPTION", {limit:8});
 ({
   top5: hits.slice(0,5).map(h => ({name: h.name, file: h.file, line: h.line, score: h.score, sig: h.signature, preview: h.preview}))
 })
 ```
 
-Replace the search query with the actual feature description from the user's question.
-
 ## Step 2: Understand the pattern and context (one call)
 
-Take the best match from Step 1 and see its neighborhood + find similar code:
+Take the best result's ref ID and explore its neighborhood + find similar code:
 
 ```js
-let n = neighborhood("R1", {before:2, after:2});
-let sim = similar("R1", {limit:3});
+// Use the actual ref ID from Step 1 (e.g. R1, R2)
+let n = neighborhood("REF_ID", {before:2, after:2});
+let sim = similar("REF_ID", {limit:3});
 ({
   file: n.file, imports: n.imports,
   before: n.before.map(c => c.name + " " + c.summary),
@@ -37,15 +37,13 @@ let sim = similar("R1", {limit:3});
 })
 ```
 
-Use the actual ref ID from Step 1 results.
-
 ## Step 3: Find wiring/registration (one call)
 
 ```js
-let wiring = grep("register|wire|create.*handler|add.*tool", {limit:5});
+let wiring = grep("register|wire|create.*handler|add.*tool|setup|configure", {limit:5});
 ({results: wiring.map(w => ({name: w.name, file: w.file, matchLine: w.matchLine}))})
 ```
 
 ## Done
 
-3 calls. Synthesize the plan. If a wiring point is unclear, ONE more context() call on that file.
+3 calls. Synthesize the plan. If a wiring point is unclear, ONE more `context("file")` call.

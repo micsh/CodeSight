@@ -13,8 +13,9 @@ Produce an impact assessment for changing a type, function, or module.
 ## Step 1: Find definition + all references (one call)
 
 ```js
-let def = search("ChecklistTracker", {limit:1});
-let r = refs("ChecklistTracker", {limit:30});
+// Replace TARGET_NAME with the actual type/function name
+let def = search("TARGET_NAME", {limit:1});
+let r = refs("TARGET_NAME", {limit:30});
 let byFile = {};
 r.forEach(x => { if (!byFile[x.file]) byFile[x.file] = []; byFile[x.file].push(x.matchLine); });
 ({
@@ -25,13 +26,11 @@ r.forEach(x => { if (!byFile[x.file]) byFile[x.file] = []; byFile[x.file].push(x
 })
 ```
 
-Replace "ChecklistTracker" with the actual name from the user's question.
-
 ## Step 2: Module-level impact (one call)
 
 ```js
-let d = deps("ChecklistTracker");
-let imp = impact("ChecklistTracker");
+let d = deps("TARGET_NAME");
+let imp = impact("TARGET_NAME");
 ({
   moduleDependers: d,
   typeImpactFiles: imp.map(i => i.file)
@@ -40,6 +39,6 @@ let imp = impact("ChecklistTracker");
 
 ## Done
 
-2 calls. The matchLines from Step 1 tell you HOW it's used — categorize them into constructor calls, type annotations, method calls. Synthesize.
+2 calls. The matchLines from Step 1 tell you HOW it's used — categorize into constructor calls, type annotations, method calls. Synthesize.
 
-If a specific reference looks risky, ONE expand() call to see full context.
+If a specific reference looks risky, ONE `expand()` call to see full context.
