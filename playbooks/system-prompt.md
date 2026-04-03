@@ -31,6 +31,27 @@ similar(id, {limit})                → same as search
 
 Results carry ref IDs (R1, R2...) — use them with expand/neighborhood.
 
+## Important: output is auto-formatted
+
+The tool automatically formats all return values — objects, arrays, strings, numbers. You do **NOT** need `JSON.stringify`. Just return the value directly:
+
+```js
+// WRONG — don't use JSON.stringify
+JSON.stringify(modules())
+
+// RIGHT — just return the expression
+modules()
+```
+
+For combined queries, return an object literal wrapped in parentheses:
+
+```js
+// RIGHT — object with multiple results
+let m = modules();
+let r = refs("MyType", {limit:10});
+({moduleCount: m.length, refCount: r.length, topRefs: r.slice(0,3)})
+```
+
 ## Efficient querying
 
 Combine multiple queries in one code_search call using JavaScript:
@@ -38,15 +59,15 @@ Combine multiple queries in one code_search call using JavaScript:
 ```js
 // Bad: one call per query
 code_search('modules()')
-code_search('context("Orchestrator.fs")')
-code_search('refs("AgentConfig", {limit:10})')
+code_search('context("File.fs")')
+code_search('refs("MyType", {limit:10})')
 
-// Good: combine in one call, return a summary object
+// Good: combine in one call
 code_search(`
   let m = modules();
-  let ctx = context("Orchestrator.fs");
-  let r = refs("AgentConfig", {limit:10});
-  ({modules: m.length, orchestratorChunks: ctx.chunks.length, agentConfigRefs: r.length, topRefs: r.slice(0,3)})
+  let ctx = context("File.fs");
+  let r = refs("MyType", {limit:10});
+  ({modules: m.length, chunks: ctx.chunks.length, refs: r.length, topRefs: r.slice(0,3)})
 `)
 ```
 

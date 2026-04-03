@@ -1,11 +1,26 @@
 namespace AITeam.CodeSight
 
 open System.Collections.Generic
+open System.Dynamic
+open System.Text.Json
 
 /// Result formatting for LLM consumption.
 module Format =
 
+    /// Convert ExpandoObject (and nested ones) to IDictionary for uniform handling.
+    let rec private normalize (v: obj) : obj =
+        match v with
+        | :? ExpandoObject as expando ->
+            let d = Dictionary<string, obj>()
+            for kv in (expando :> IDictionary<string, obj>) do
+                d.[kv.Key] <- normalize kv.Value
+            box d
+        | :? (obj[]) as arr ->
+            box (arr |> Array.map normalize)
+        | _ -> v
+
     let formatValue (v: obj) : string =
+        let v = normalize v
         match v with
         | :? (IDictionary<string, obj>) as d ->
             let lines = ResizeArray<string>()
@@ -124,5 +139,12 @@ module Format =
         | :? (string[]) as arr -> arr |> String.concat "\n"
         | :? (obj[]) as arr when arr.Length = 0 -> "(no results)"
         | null -> "(no results)"
-        | other -> string other
+        | :? string as s -> s
+        | :? int as i -> string i
+        | :? float as f -> sprintf "%.3f" f
+        | :? bool as b -> if b then "true" else "false"
+        | other ->
+            // Fallback: try JSON serialization for unknown types
+            try JsonSerializer.Serialize(other, JsonSerializerOptions(WriteIndented = true))
+            with _ -> string other
 
