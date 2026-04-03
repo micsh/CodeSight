@@ -92,25 +92,28 @@ module QueryEngine =
     /// Evaluate JS with IIFE wrapping (avoids let-redeclaration across calls).
     let eval (engine: Engine) (js: string) : string =
         try
-            let lines = js.Trim().Split('\n') |> Array.map (fun s -> s.Trim()) |> Array.filter (fun s -> s <> "")
-            let body =
-                if lines.Length <= 1 then
-                    let line = lines.[0]
-                    // Don't add return to declarations or statements
-                    if line.StartsWith("let ") || line.StartsWith("const ") || line.StartsWith("var ") || line.StartsWith("for ") || line.StartsWith("if ") then
-                        line
-                    else
-                        sprintf "return %s" line
+            let trimmed = js.Trim()
+            // If already wrapped in IIFE, evaluate as-is
+            let toEval =
+                if trimmed.StartsWith("(") && trimmed.EndsWith(")") then trimmed
                 else
-                    let lastLine = lines.[lines.Length-1]
-                    let init = lines.[..lines.Length-2] |> String.concat "\n  "
-                    if lastLine.StartsWith("let ") || lastLine.StartsWith("const ") || lastLine.StartsWith("var ") || lastLine.StartsWith("for ") || lastLine.StartsWith("if ") then
-                        // Last line is a statement — wrap entire block, eval returns last expression
-                        lines |> String.concat "\n  "
+                    let lines = trimmed.Split('\n') |> Array.map (fun s -> s.Trim()) |> Array.filter (fun s -> s <> "")
+                    // Join everything into one line, find the last semicolon to split statements from final expression
+                    let joined = lines |> String.concat " "
+                    let lastSemi = joined.LastIndexOf(';')
+                    if lastSemi > 0 && lastSemi < joined.Length - 2 then
+                        let stmts = joined.Substring(0, lastSemi + 1)
+                        let expr = joined.Substring(lastSemi + 1).Trim()
+                        if expr.Length > 0 then
+                            sprintf "(function() { %s return %s; })()" stmts expr
+                        else
+                            sprintf "(function() { return %s; })()" joined
+                    elif joined.StartsWith("let ") || joined.StartsWith("const ") || joined.StartsWith("var ") then
+                        // All declarations, no trailing expression
+                        sprintf "(function() { %s })()" joined
                     else
-                        sprintf "%s\n  return %s" init lastLine
-            let wrapped = sprintf "(function() {\n  %s\n})()" body
-            let result = engine.Evaluate(wrapped)
+                        sprintf "(function() { return %s; })()" joined
+            let result = engine.Evaluate(toEval)
             let native = result.ToObject()
             Format.formatValue native
         with ex -> sprintf "Error: %s" ex.Message
