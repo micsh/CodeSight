@@ -51,6 +51,7 @@ module Intel =
             ReasoningEffort = "high",
             SessionId = sessionId,
             Tools = ResizeArray<AIFunction>([codeSearchTool; readPlaybookTool]),
+            ExcludedTools = ResizeArray<string>(["task"; "report_intent"; "view"; "grep"; "glob"; "powershell"; "edit"; "create"]),
             SystemMessage = SystemMessageConfig(
                 Mode = SystemMessageMode.Replace,
                 Content = systemPrompt),
