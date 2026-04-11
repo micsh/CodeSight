@@ -1,6 +1,6 @@
 # AITeam.CodeSight
 
-Code intelligence tool for any codebase. Indexes source code using tree-sitter AST parsing, then provides 12 query primitives via CLI. Agents and developers can search semantically, trace references, analyze impact, and explore code structure — all without reading full files.
+Code intelligence tool for any codebase. Indexes source code using tree-sitter AST parsing, then provides 13 query primitives via CLI. Agents and developers can search semantically, trace references, analyze impact, and explore code structure — all without reading full files.
 
 ## Setup
 
@@ -19,13 +19,17 @@ code-sight index --repo /path/to/repo
 # Project map — what modules exist, how many files, key types
 code-sight modules
 
-# Direct queries — 12 primitives via JavaScript
+# Direct queries — 13 primitives via JavaScript
 code-sight search 'refs("MyType", {limit:10})'
 code-sight search 'context("Orchestrator.fs")'
 code-sight search 'grep("Result<string, CliError>")'
 code-sight search 'modules()'
 
+# eval — alias for search, semantic clarity for non-search expressions
+code-sight eval 'modules()'
+
 # Natural language exploration — dispatches to gpt-mini scout
+# Auto-discovers UDFs and includes their signatures in the AI tool description
 code-sight intel "What does this codebase do?"
 code-sight intel "Where should I add a new reactor?"
 code-sight intel "What breaks if I change AgentConfig?"
@@ -39,11 +43,14 @@ code-sight repl
 
 # List available scopes
 code-sight scopes
+
+# Show full help including all primitives
+code-sight --help
 ```
 
 If `--repo` is omitted, uses the current working directory.
 
-## Primitives (12 functions)
+## Primitives (13 functions)
 
 | Function | Returns | Use for |
 |----------|---------|---------|
@@ -59,10 +66,106 @@ If `--repo` is omitted, uses the current working directory.
 | `expand(id)` | full source code + imports + dependents | read code |
 | `neighborhood(id, {before, after})` | target code + surrounding chunks | code in context |
 | `similar(id, {limit})` | structurally similar chunks | find patterns |
+| `walk(name, {depth, limit})` | recursive reference chain tracing | call chains |
 
 Results carry ref IDs (R1, R2...) — pass them to `expand()` or `neighborhood()` to drill deeper.
 
 Compose with JavaScript: `.filter()`, `.map()`, `let` variables. Each query is isolated.
+
+### Composition Helpers
+
+In addition to the query primitives, four composition helpers are available as globals:
+
+| Helper | Description |
+|--------|-------------|
+| `pipe(value, fn1, fn2, ...)` | Thread a value through a series of functions sequentially |
+| `tap(value, fn)` | Run `fn` for side-effects (e.g. debugging), return `value` unchanged |
+| `mergeBy(key, arr1, arr2, ...)` | Union multiple arrays with dedup by the specified key field |
+| `print(value)` | Debug output to stderr (Jint has no `console` object — use `print` instead) |
+
+```js
+// Thread search results through similar then expand
+pipe(search('auth'), function(r) { return similar(r[0].id) })
+
+// Debug without breaking chains
+tap(search('auth'), function(r) { print('found ' + r.length + ' results') })
+
+// Combine results from different primitives with dedup
+mergeBy('id', search('auth'), grep('authentication'))
+```
+
+## Functions
+
+Save chains of primitives as reusable, named functions. Functions are **per-repo** — each repo has its own set, stored in `code-sight.functions.json` at the repo root.
+
+### Defining functions
+
+```bash
+# Simple function with no parameters
+code-sight fn add overview --desc "Quick project map" "modules()"
+
+# Function with parameters
+code-sight fn add deepSearch --params "q" --desc "Search + similar expansion" \
+  "search(q).concat(similar(search(q)[0]))"
+
+# Multi-parameter function
+code-sight fn add scopedGrep --params "pattern,file" \
+  "grep(pattern, {file: file})"
+
+# Read body from a file (useful for complex functions)
+code-sight fn add audit --file audit-fn.js --desc "Full code audit"
+```
+
+### Using functions
+
+Once defined, functions are available in any `search` expression:
+
+```bash
+code-sight search "deepSearch('authentication')"
+code-sight search "scopedGrep('TODO', 'Orchestrator.fs')"
+```
+
+### Managing functions
+
+```bash
+# List all functions (compact: name, params, description)
+code-sight fn list
+
+# Full details including function body
+code-sight fn list --verbose
+
+# Machine-readable JSON output
+code-sight fn list --json
+
+# Remove a function
+code-sight fn rm deepSearch
+```
+
+### Options for `fn add`
+
+| Option | Description |
+|--------|-------------|
+| `--params "a,b"` | Comma-separated parameter names |
+| `--desc "..."` | Optional description |
+| `--file <path>` | Read function body from a file instead of inline |
+
+Function bodies use the same last-expression-return semantics as inline queries. Names are validated — they must be valid JS identifiers and cannot shadow built-in primitives.
+
+### The `eval` command
+
+`eval` is an alias for `search`. Use it when your expression isn't really a "search" — e.g. `eval "modules()"`. Behavior is identical.
+
+### Intel UDF discovery
+
+The `intel` command auto-discovers user-defined functions and includes their signatures in the AI tool description. This means the gpt-mini scout agent can use your UDFs when answering questions — no extra configuration needed. Define a function with `fn add`, and `intel` will pick it up automatically.
+
+### Improved result formatting
+
+Mixed result arrays (e.g. `refs('MyType').concat(search('MyType'))`) now format cleanly. Each result item carries internal type metadata, so the formatter applies deterministic per-item formatting instead of guessing the shape of the entire array. No action needed — this is automatic.
+
+### Storage
+
+Functions are stored in `code-sight.functions.json` in the repo root. This file is meant to be committed alongside your code so the whole team shares the same functions.
 
 ## Configuration
 
@@ -98,7 +201,7 @@ code-sight.exe
   ├── src/Services/      Embedding HTTP client, file hashing (SHA256)
   ├── src/Parsing/       Tree-sitter Node.js process wrapper
   ├── src/Index/         TSV + binary persistence, in-memory queries
-  ├── src/Query/         12 primitives, Jint engine, formatting, intel
+  ├── src/Query/         13 primitives, Jint engine, FunctionStore, formatting, intel
   ├── parsers/           JS files: ts-chunker.js, chunker-core.js, languages/*
   └── playbooks/         Strategy guides: orient, plan, blast, explore, review
 ```
