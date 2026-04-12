@@ -37,9 +37,22 @@ The default URL is `http://localhost:1234/v1/embeddings`.
 
 ## Setup
 
+For development (building from source):
+
 ```
 cd parsers && npm install --legacy-peer-deps
+dotnet build
 ```
+
+For binary distribution, publish a self-contained single-file executable:
+
+```bash
+dotnet publish -c Release -r win-x64    # Windows
+dotnet publish -c Release -r linux-x64  # Linux
+dotnet publish -c Release -r osx-arm64  # macOS Apple Silicon
+```
+
+The output is a single `code-sight` executable with all dependencies bundled (parsers and playbooks included). Only **Node.js** is required at runtime (tree-sitter runs as a child process).
 
 F# support requires `tree-sitter-fsharp` — copy it into `parsers/node_modules/` from a local build or the AITeam.Platform repo.
 

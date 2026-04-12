@@ -32,3 +32,14 @@ jobs:
 
     - name: Build
       run: dotnet build --no-restore -c Release
+
+    - name: Publish
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      run: dotnet publish -c Release -r linux-x64 -o publish
+
+    - name: Upload artifact
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      uses: actions/upload-artifact@v4
+      with:
+        name: code-sight-linux-x64
+        path: publish/

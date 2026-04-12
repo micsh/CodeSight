@@ -5,6 +5,9 @@
     <TargetFramework>net10.0</TargetFramework>
     <AssemblyName>code-sight</AssemblyName>
     <RootNamespace>AITeam.CodeSight</RootNamespace>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
 
   <ItemGroup>
@@ -29,7 +32,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="parsers\**\*" Exclude="parsers\node_modules\**" CopyToOutputDirectory="PreserveNewest" LinkBase="parsers" />
+    <Content Include="parsers\**\*" CopyToOutputDirectory="PreserveNewest" LinkBase="parsers" />
     <Content Include="playbooks\**\*.md" CopyToOutputDirectory="PreserveNewest" LinkBase="playbooks" />
   </ItemGroup>
 
