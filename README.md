@@ -256,6 +256,13 @@ code-sight.exe
 - The embedding server must be running before `index` or `search` commands. Other commands (`modules`, `files`, `refs`, `grep`, `fn`) work offline against the cached index.
 - Index data is stored in `.code-intel/` at the repo root (gitignored by default).
 
+## Future Ideas
+
+- **trace(fromRef, toRef)** — BFS path query over the dependency graph between two symbols.
+- **bridge(entity)** — Cross-index join between code-sight and knowledge-sight refs.
+- **arch integration** — Shell out to `arch context --json` and merge architectural boundaries into `context()` output.
+- **findings(query)** — Embedding search over accumulated session findings/insights.
+
 ## License
 
 MIT

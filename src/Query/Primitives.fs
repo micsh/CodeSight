@@ -39,6 +39,37 @@ type QuerySession(indexDir: string) =
     member _.GetRef(id: string) =
         match refs.TryGetValue(id) with true, v -> Some v | _ -> None
 
+    member _.SaveSession(name: string) =
+        let sessDir = Path.Combine(indexDir, "sessions")
+        Directory.CreateDirectory(sessDir) |> ignore
+        let dict = Dictionary<string, int>()
+        for kv in refs do dict.[kv.Key] <- kv.Value
+        let json = System.Text.Json.JsonSerializer.Serialize(dict)
+        File.WriteAllText(Path.Combine(sessDir, name + ".json"), json)
+
+    member _.LoadSession(name: string) =
+        let sessPath = Path.Combine(indexDir, "sessions", name + ".json")
+        if File.Exists sessPath then
+            let json = File.ReadAllText(sessPath)
+            let doc = System.Text.Json.JsonDocument.Parse(json)
+            refs.Clear()
+            counter <- 0
+            for prop in doc.RootElement.EnumerateObject() do
+                refs.[prop.Name] <- prop.Value.GetInt32()
+                let num = prop.Name.Substring(1) |> int
+                if num > counter then counter <- num
+            true
+        else false
+
+    member _.ListSessions() =
+        let sessDir = Path.Combine(indexDir, "sessions")
+        if Directory.Exists sessDir then
+            Directory.GetFiles(sessDir, "*.json")
+            |> Array.map (fun f -> Path.GetFileNameWithoutExtension(f))
+        else [||]
+
+    member _.RefCount = refs.Count
+
 /// Mutable dictionary builder — Jint needs writable dictionaries.
 [<AutoOpen>]
 module DictHelper =
@@ -412,3 +443,78 @@ module Primitives =
                 results.ToArray()
         with ex ->
             [| mdict [ "error", box (sprintf "git not available: %s" ex.Message) ] |]
+
+    // ── hotspots ──
+
+    /// hotspots({by, min}) — structural metrics per file: chunks, LOC, fanIn, fanOut, kinds.
+    let hotspots (index: CodeIndex) (sortBy: string) (minChunks: int) =
+        // Compute fanOut per file (how many modules this file imports)
+        let fanOutMap =
+            index.Imports |> Array.groupBy fst
+            |> Array.map (fun (f, imps) -> Path.GetFileName(f), imps.Length) |> dict
+        // Compute fanIn per file (how many files import this file's module)
+        let fanInMap =
+            index.Imports |> Array.groupBy snd
+            |> Array.map (fun (m, importers) -> m, importers.Length) |> dict
+        // Group chunks by file
+        index.Chunks |> Array.groupBy (fun c -> c.FilePath)
+        |> Array.choose (fun (filePath, chunks) ->
+            if chunks.Length < minChunks then None
+            else
+                let fileName = Path.GetFileName(filePath)
+                let loc = chunks |> Array.sumBy (fun c -> c.EndLine - c.StartLine + 1)
+                let kinds = chunks |> Array.map (fun c -> c.Kind) |> Array.distinct |> Array.sort
+                let moduleName = chunks.[0].Module
+                let fanOut = match fanOutMap.TryGetValue(fileName) with true, v -> v | _ -> 0
+                let fanIn = match fanInMap.TryGetValue(moduleName) with true, v -> v | _ -> 0
+                Some (mdict [
+                    "file", box fileName; "path", box filePath; "chunks", box chunks.Length
+                    "loc", box loc; "fanIn", box fanIn; "fanOut", box fanOut
+                    "kinds", box (kinds |> String.concat ",") ]))
+        |> Array.sortByDescending (fun d ->
+            match sortBy with
+            | "loc" -> d.["loc"] :?> int
+            | "fanIn" -> d.["fanIn"] :?> int
+            | "fanOut" -> d.["fanOut"] :?> int
+            | _ -> d.["chunks"] :?> int)
+
+    // ── explain ──
+
+    /// explain(refId) — debug primitive showing index metadata and findSource diagnosis.
+    let explain (index: CodeIndex) (session: QuerySession) (chunks: CodeChunk[] option) (refId: string) =
+        match session.GetRef(refId) with
+        | None -> mdict [ "error", box (sprintf "ref %s not found in session" refId) ]
+        | Some idx when idx < 0 || idx >= index.Chunks.Length ->
+            mdict [ "error", box (sprintf "ref %s points to chunk %d but index has %d chunks" refId idx index.Chunks.Length) ]
+        | Some idx ->
+            let c = index.Chunks.[idx]
+            let cid = IndexStore.chunkId c.FilePath c.Name c.StartLine
+            let sourceMatch =
+                match chunks with
+                | None -> "source chunks not loaded"
+                | Some chs ->
+                    // Try CID match
+                    let cidMatch = chs |> Array.tryFind (fun ch ->
+                        IndexStore.chunkId ch.FilePath ch.Name ch.StartLine = cid)
+                    match cidMatch with
+                    | Some ch -> sprintf "CID match (%s), content length: %d" cid ch.Content.Length
+                    | None ->
+                        // Try triple-key fallback
+                        let tripleMatch = chs |> Array.tryFind (fun ch ->
+                            ch.FilePath = c.FilePath && ch.Name = c.Name && ch.StartLine = c.StartLine)
+                        match tripleMatch with
+                        | Some ch -> sprintf "triple-key match (no CID), content length: %d" ch.Content.Length
+                        | None ->
+                            let normPath (p: string) = p.Replace('\\', '/')
+                            let pathMatch = chs |> Array.tryFind (fun ch -> normPath ch.FilePath = normPath c.FilePath && ch.Name = c.Name)
+                            match pathMatch with
+                            | Some ch -> sprintf "partial match (name+path, line differs: source=%d vs index=%d), content length: %d" ch.StartLine c.StartLine ch.Content.Length
+                            | None -> sprintf "NO MATCH — findSource will return None. CID=%s, FilePath=%s, Name=%s, StartLine=%d" cid c.FilePath c.Name c.StartLine
+            let d = mdict [
+                "refId", box refId; "chunkIdx", box idx; "cid", box cid
+                "filePath", box c.FilePath; "module", box c.Module; "name", box c.Name
+                "kind", box c.Kind; "startLine", box c.StartLine; "endLine", box c.EndLine
+                "summary", box c.Summary; "signature", box c.Signature
+                "sourceMatch", box sourceMatch ]
+            for kv in c.Extra do d.[kv.Key] <- box kv.Value
+            d
