@@ -1,6 +1,20 @@
 # CodeSight
 
-Code intelligence tool for any codebase. Indexes source code using tree-sitter AST parsing, then provides 13 query primitives via CLI. Agents and developers can search semantically, trace references, analyze impact, and explore code structure — all without reading full files.
+Code intelligence tool for any codebase. Indexes source code using tree-sitter AST parsing, then provides query primitives via CLI. Agents and developers can search semantically, trace references, analyze impact, and explore code structure — all without reading full files.
+
+## Install
+
+**macOS / Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/micsh/CodeSight/main/install.sh | bash
+```
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/micsh/CodeSight/main/install.ps1 | iex
+```
+
+Or download binaries directly from [Releases](https://github.com/micsh/CodeSight/releases).
 
 ## Prerequisites
 
