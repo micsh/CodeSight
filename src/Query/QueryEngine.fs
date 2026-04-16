@@ -48,7 +48,7 @@ module QueryEngine =
         result
 
     /// Create a Jint engine with all primitives wired.
-    let create (index: CodeIndex) (chunks: CodeChunk[] option) (embeddingUrl: string) (indexDir: string) (repoRoot: string) (srcDirs: string[]) =
+    let create (index: CodeIndex) (chunks: CodeChunk[] option) (embeddingUrl: string) (indexDir: string) (repoRoot: string) (srcDirs: string[]) (peerPath: string option) =
         let session = QuerySession(indexDir)
         let engine = Engine()
 
@@ -147,6 +147,32 @@ module QueryEngine =
         // arch
         engine.SetValue("arch", Func<string, obj>(fun filePath ->
             box (stamp1 "arch" (Primitives.arch repoRoot filePath)))) |> ignore
+
+        // Bridge primitives (L1): drift() and coverage()
+        // Peer index is loaded lazily on first call
+        let mutable peerIndex: Bridge.PeerTypes.KsPeerIndex option = None
+        let getPeer () =
+            match peerIndex with
+            | Some p -> Some p
+            | None ->
+                match Bridge.PeerIndex.discover repoRoot peerPath with
+                | Some ksDir ->
+                    let p = Bridge.PeerIndex.load ksDir
+                    peerIndex <- Some p
+                    eprintfn "  Bridge: loaded KS peer index (%d chunks, %d source chunks)" p.Chunks.Length p.SourceChunks.Length
+                    Some p
+                | None -> None
+
+        engine.SetValue("drift", Func<obj>(fun () ->
+            match getPeer() with
+            | Some peer -> box (stamp "drift" (Bridge.BridgePrimitives.drift index peer))
+            | None -> box [| mdict [ "error", box "No KnowledgeSight index found at .knowledge-sight/ — run 'knowledge-sight index' first" ] |])) |> ignore
+
+        engine.SetValue("coverage", Func<obj, obj>(fun opts ->
+            let minFanIn = jsInt opts "minFanIn" 2
+            match getPeer() with
+            | Some peer -> box (stamp "coverage" (Bridge.BridgePrimitives.coverage index peer minFanIn))
+            | None -> box [| mdict [ "error", box "No KnowledgeSight index found at .knowledge-sight/ — run 'knowledge-sight index' first" ] |])) |> ignore
 
         // Composition helpers
         engine.SetValue("print", Action<obj>(fun v ->

@@ -9,7 +9,7 @@ let printUsage () =
     printfn "  code-sight index [--repo <path>]                     Build/update index"
     printfn "  code-sight index --files <f1> <f2> ... [--repo <path>] Re-index specific files"
     printfn "  code-sight modules [--repo <path>]                   Show project map"
-    printfn "  code-sight search <js> [--json] [--repo <path>] [--scope <s>] Run a query"
+    printfn "  code-sight search <js> [--json] [--repo <path>] [--scope <s>] [--peer <ks-path>] Run a query"
     printfn "  code-sight eval <js> [--json] [--repo <path>]                 Alias for search"
     printfn "  code-sight eval - [--json] [--repo <path>]                    Read expression from stdin"
     printfn "  code-sight intel <question> [--repo <path>]          Ask about the codebase"
@@ -54,6 +54,10 @@ let printUsage () =
     printfn "  trace(from, to)                      BFS shortest path between two files"
     printfn "  arch(file)                           Architectural context from arch tool"
     printfn ""
+    printfn "Bridge primitives (active when .knowledge-sight/ index exists):"
+    printfn "  drift()                              KS sections referencing missing CS symbols"
+    printfn "  coverage({minFanIn})                 Important CS files with no KS documentation"
+    printfn ""
     printfn "Composition helpers:"
     printfn "  pipe(value, fn1, fn2, ...)           Thread value through functions"
     printfn "  tap(value, fn)                       Run fn for side-effects, return value"
@@ -74,12 +78,16 @@ let parseArgs (args: string[]) =
     let mutable fnFile = ""
     let mutable verbose = false
     let mutable jsonOut = false
+    let mutable peerPath = ""
     let files = ResizeArray<string>()
     let mutable i = 0
     while i < args.Length do
         match args.[i] with
         | "--repo" when i + 1 < args.Length ->
             repo <- args.[i + 1]
+            i <- i + 2
+        | "--peer" when i + 1 < args.Length ->
+            peerPath <- args.[i + 1]
             i <- i + 2
         | "--scope" when i + 1 < args.Length ->
             scope <- args.[i + 1]
@@ -151,6 +159,7 @@ let parseArgs (args: string[]) =
                 | "--json" -> jsonOut <- true; i <- i + 1
                 | "--repo" when i + 1 < args.Length -> repo <- args.[i + 1]; i <- i + 2
                 | "--scope" when i + 1 < args.Length -> scope <- args.[i + 1]; i <- i + 2
+                | "--peer" when i + 1 < args.Length -> peerPath <- args.[i + 1]; i <- i + 2
                 | _ -> i <- i + 1
         | "search" | "eval" ->
             command <- "search"
@@ -160,7 +169,7 @@ let parseArgs (args: string[]) =
             query <- arg
             i <- i + 1
         | _ -> i <- i + 1
-    repo, command, query, scope, files.ToArray(), fnName, fnParams, fnDesc, fnFile, verbose, jsonOut
+    repo, command, query, scope, files.ToArray(), fnName, fnParams, fnDesc, fnFile, verbose, jsonOut, peerPath
 
 /// Ensure index dir exists and has a .gitignore so repos don't need to add it.
 let private ensureIndexDir (dir: string) =
@@ -468,7 +477,7 @@ let runIndexFiles (cfg: CodeSightConfig) (files: string[]) =
 
 [<EntryPoint>]
 let main args =
-    let repo, command, query, scope, files, fnName, fnParams, fnDesc, fnFile, verbose, jsonOut = parseArgs args
+    let repo, command, query, scope, files, fnName, fnParams, fnDesc, fnFile, verbose, jsonOut, peerPath = parseArgs args
 
     match command with
     | "help" ->
@@ -568,12 +577,12 @@ let main args =
                     else None)
             // For modules/files/context/impact/imports/deps — no chunks needed
             // Pass None initially; primitives that need chunks will force the lazy
-            let mutable engine = QueryEngine.create index None cfg.EmbeddingUrl cfg.IndexDir cfg.RepoRoot cfg.SrcDirs
+            let mutable engine = QueryEngine.create index None cfg.EmbeddingUrl cfg.IndexDir cfg.RepoRoot cfg.SrcDirs (if peerPath <> "" then Some peerPath else None)
             let needsChunks = [| "expand"; "grep"; "refs"; "neighborhood"; "similar"; "walk"; "callers"; "explain" |]
             let ensureChunks (js: string) =
                 if needsChunks |> Array.exists (fun p -> js.Contains(p)) then
                     if not chunksRef.IsValueCreated then
-                        engine <- QueryEngine.create index chunksRef.Value cfg.EmbeddingUrl cfg.IndexDir cfg.RepoRoot cfg.SrcDirs
+                        engine <- QueryEngine.create index chunksRef.Value cfg.EmbeddingUrl cfg.IndexDir cfg.RepoRoot cfg.SrcDirs (if peerPath <> "" then Some peerPath else None)
 
             match command with
             | "modules" ->
@@ -601,7 +610,7 @@ let main args =
                 eprintfn "  files(p?), context(file), expand(id), neighborhood(id,opts),"
                 eprintfn "  impact(type), imports(file), deps(pattern), similar(id,opts)"
                 eprintfn ""
-                engine <- QueryEngine.create index chunksRef.Value cfg.EmbeddingUrl cfg.IndexDir cfg.RepoRoot cfg.SrcDirs
+                engine <- QueryEngine.create index chunksRef.Value cfg.EmbeddingUrl cfg.IndexDir cfg.RepoRoot cfg.SrcDirs (if peerPath <> "" then Some peerPath else None)
                 let mutable running = true
                 while running do
                     eprintf "> "
@@ -618,7 +627,7 @@ let main args =
                     1
                 else
                     // Ensure chunks loaded for the mini-agent's code_search calls
-                    engine <- QueryEngine.create index chunksRef.Value cfg.EmbeddingUrl cfg.IndexDir cfg.RepoRoot cfg.SrcDirs
+                    engine <- QueryEngine.create index chunksRef.Value cfg.EmbeddingUrl cfg.IndexDir cfg.RepoRoot cfg.SrcDirs (if peerPath <> "" then Some peerPath else None)
                     let modulesCache= QueryEngine.eval engine "modules()"
                     let playbooksDir =
                         // 1. Per-repo override

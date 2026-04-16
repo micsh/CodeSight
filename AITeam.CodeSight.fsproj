@@ -25,6 +25,8 @@
     <Compile Include="src/Services/Services.fs" />
     <Compile Include="src/Parsing/TreeSitterChunker.fs" />
     <Compile Include="src/Index/IndexStore.fs" />
+    <Compile Include="src/Bridge/PeerIndex.fs" />
+    <Compile Include="src/Bridge/BridgePrimitives.fs" />
     <Compile Include="src/Query/Format.fs" />
     <Compile Include="src/Query/Primitives.fs" />
     <Compile Include="src/Query/FunctionStore.fs" />
