@@ -11,11 +11,23 @@ type KnowledgeSightConfig = {
     IndexDir: string
     EmbeddingUrl: string
     EmbeddingBatchSize: int
+    CompletionUrl: string
+    ConflictJudgeModel: string
+    InboxDir: string
+    ArchiveProcessed: bool
+    RequireFields: string[]
+    RequireFieldsMode: string
+    PromoteCollision: string
 }
 
 module Config =
 
     let private defaultExclude = [| "node_modules"; "bin"; "obj"; ".git"; "wwwroot"; "dist"; ".code-intel" |]
+
+    let private normalizeScanDir (dir: string) =
+        let trimmed = dir.Replace("\\", "/").Trim().Trim('/')
+        if trimmed = "" then "."
+        else trimmed
 
     /// Auto-detect directories containing markdown files.
     let private detectDocDirs (repoRoot: string) =
@@ -39,9 +51,14 @@ module Config =
             let root = doc.RootElement
             let str (p: string) d = match root.TryGetProperty(p) with true, v -> v.GetString() | _ -> d
             let int' (p: string) d = match root.TryGetProperty(p) with true, v -> v.GetInt32() | _ -> d
+            let bool' (p: string) d = match root.TryGetProperty(p) with true, v -> v.GetBoolean() | _ -> d
             let strArr (p: string) d =
                 match root.TryGetProperty(p) with
-                | true, v -> v.EnumerateArray() |> Seq.map (fun x -> x.GetString()) |> Seq.toArray
+                | true, v ->
+                    v.EnumerateArray()
+                    |> Seq.map (fun x -> x.GetString())
+                    |> Seq.filter (isNull >> not)
+                    |> Seq.toArray
                 | _ -> d
             {
                 RepoRoot = repoRoot
@@ -50,6 +67,13 @@ module Config =
                 IndexDir = str "indexDir" indexDir
                 EmbeddingUrl = str "embeddingUrl" "http://localhost:1234/v1/embeddings"
                 EmbeddingBatchSize = int' "embeddingBatchSize" 50
+                CompletionUrl = str "completionUrl" ""
+                ConflictJudgeModel = str "conflictJudgeModel" ""
+                InboxDir = str "inboxDir" "inbox"
+                ArchiveProcessed = bool' "archiveProcessed" true
+                RequireFields = strArr "requireFields" [| "verify"; "concept" |]
+                RequireFieldsMode = str "requireFieldsMode" "warn"
+                PromoteCollision = str "promoteCollision" "suffix"
             }
         else
             {
@@ -59,11 +83,24 @@ module Config =
                 IndexDir = indexDir
                 EmbeddingUrl = "http://localhost:1234/v1/embeddings"
                 EmbeddingBatchSize = 50
+                CompletionUrl = ""
+                ConflictJudgeModel = ""
+                InboxDir = "inbox"
+                ArchiveProcessed = true
+                RequireFields = [| "verify"; "concept" |]
+                RequireFieldsMode = "warn"
+                PromoteCollision = "suffix"
             }
+
+    let private scanDocDirs (cfg: KnowledgeSightConfig) =
+        [| yield! cfg.DocDirs; yield cfg.InboxDir |]
+        |> Array.filter (String.IsNullOrWhiteSpace >> not)
+        |> Array.map normalizeScanDir
+        |> Array.distinct
 
     /// Find all .md files under the configured doc dirs.
     let findDocFiles (cfg: KnowledgeSightConfig) =
-        cfg.DocDirs
+        scanDocDirs cfg
         |> Array.collect (fun dir ->
             let absDir = Path.Combine(cfg.RepoRoot, dir)
             if Directory.Exists absDir then

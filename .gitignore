@@ -8,3 +8,5 @@ obj/
 .vs/
 node_modules/
 experiments/
+src/KnowledgeSight/fixtures/
+src/CodeSight/verify-contracts.ps1

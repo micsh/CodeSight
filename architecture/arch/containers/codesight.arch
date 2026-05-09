@@ -1,0 +1,54 @@
+ARCH: 0.4
+CONT: codesight
+PATH: src/CodeSight
+DEP: sightcore
+DESC: Code intelligence CLI for indexing source code and running JS-based code queries
+
+MOD: types
+  FILE: src/Types/Types.fs
+  OWN: code-index-types; chunk-metadata; import-reference-types
+  BND: Shared type definitions only — no parsing, persistence, or CLI orchestration.
+
+MOD: config
+  FILE: src/Config/Config.fs
+  OWN: repository-configuration; scope-detection; parser-path-resolution
+  BND: Configuration loading only — no indexing, query execution, or CLI command handling.
+
+MOD: services
+  FILE: src/Services/Services.fs
+  OWN: file-hashing; incremental-change-detection
+  BND: Indexing support only — no query semantics or CLI routing.
+
+MOD: parsing
+  FILE: src/Parsing/TreeSitterChunker.fs
+  OWN: tree-sitter-chunking; import-extraction; signature-type-extraction
+  BND: Source parsing only — no persistence, bridge analysis, or CLI routing.
+
+MOD: parsers
+  FILES: parsers/chunker-core.js; parsers/ts-chunker.js; parsers/languages/csharp.js; parsers/languages/fsharp.js; parsers/languages/go.js; parsers/languages/index.js; parsers/languages/javascript.js; parsers/languages/python.js; parsers/languages/rust.js; parsers/languages/typescript.js
+  OWN: bundled-parser-runtime; tree-sitter-language-adapters; chunker-script-assets
+  BND: Parser runtime assets only — no index persistence, query semantics, or CLI routing.
+
+MOD: index
+  FILE: src/Index/IndexStore.fs
+  OWN: index-persistence; source-chunk-cache; embedding-storage
+  BND: Index persistence only — no parsing, query evaluation, or CLI routing.
+  DEP: codesight/types
+
+MOD: bridge
+  FILES: src/Bridge/PeerIndex.fs; src/Bridge/BridgePrimitives.fs
+  OWN: knowledgesight-peer-index-loading; cross-index-drift-analysis; cross-index-coverage-analysis
+  BND: Cross-index bridge logic only — no primary code indexing or CLI orchestration.
+  DEP: codesight/index; codesight/types
+
+MOD: query
+  FILES: src/Query/Format.fs; src/Query/Primitives.fs; src/Query/FunctionStore.fs; src/Query/QueryEngine.fs; src/Query/Intel.fs
+  OWN: query-primitives; query-engine; result-formatting; copilot-intel-dispatch
+  BND: Query evaluation only — no source parsing or CLI argument parsing.
+  DEP: codesight/bridge; codesight/config; codesight/index; codesight/types; sightcore/embeddingservice; sightcore/functionstore; sightcore/queryhelpers
+
+MOD: cli
+  FILE: Program.fs
+  OWN: command-line-entrypoint; command-routing; indexing-and-query-orchestration
+  BND: CLI orchestration only — no persistence internals or query primitive definitions.
+  DEP: codesight/config; codesight/index; codesight/parsing; codesight/query; codesight/services

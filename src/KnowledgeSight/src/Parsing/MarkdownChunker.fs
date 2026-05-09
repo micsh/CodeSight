@@ -12,6 +12,21 @@ module MarkdownChunker =
     let private linkRegex = Regex(@"\[([^\]]*)\]\(([^)]+)\)", RegexOptions.Compiled)
     let private wikiLinkRegex = Regex(@"\[\[([^\]]+)\]\]", RegexOptions.Compiled)
 
+    let private trimFrontmatterScalar (value: string) =
+        value.Trim().Trim('"').Trim('\'')
+
+    let private parseInlineFrontmatterList (value: string) =
+        let trimmed = value.Trim()
+        let content =
+            if trimmed.StartsWith("[") && trimmed.EndsWith("]") && trimmed.Length >= 2 then
+                trimmed.Substring(1, trimmed.Length - 2)
+            else
+                trimmed
+
+        content.Split([| ','; ';' |], StringSplitOptions.RemoveEmptyEntries)
+        |> Array.map trimFrontmatterScalar
+        |> Array.filter (String.IsNullOrWhiteSpace >> not)
+
     /// Extract YAML frontmatter from --- ... --- block.
     let parseFrontmatter (lines: string[]) : Frontmatter option * int =
         if lines.Length < 2 || lines.[0].Trim() <> "---" then None, 0
@@ -21,35 +36,61 @@ module MarkdownChunker =
             | None -> None, 0
             | Some i ->
                 let fmLines = lines.[1 .. i]
-                let mutable id = ""
-                let mutable title = ""
-                let mutable status = ""
-                let tags = ResizeArray<string>()
-                let related = ResizeArray<string>()
-                let extra = System.Collections.Generic.Dictionary<string, string>()
+                let fields = System.Collections.Generic.Dictionary<string, FrontmatterValue>()
+                let mutable pendingListKey: string option = None
 
-                for line in fmLines do
-                    let colonIdx = line.IndexOf(':')
-                    if colonIdx > 0 then
-                        let key = line.Substring(0, colonIdx).Trim().ToLowerInvariant()
-                        let value = line.Substring(colonIdx + 1).Trim().Trim('"')
-                        match key with
-                        | "id" -> id <- value
-                        | "title" -> title <- value
-                        | "status" -> status <- value
-                        | "tags" ->
-                            value.Split([| ','; ';' |], StringSplitOptions.RemoveEmptyEntries)
-                            |> Array.iter (fun t -> tags.Add(t.Trim()))
-                        | "related" ->
-                            value.Split([| ','; ';' |], StringSplitOptions.RemoveEmptyEntries)
-                            |> Array.iter (fun r -> related.Add(r.Trim()))
-                        | _ -> extra.[key] <- value
+                let setScalar key value =
+                    fields.[key] <- Scalar(trimFrontmatterScalar value)
 
-                let fm = {
-                    Id = id; Title = title; Status = status
-                    Tags = tags.ToArray(); Related = related.ToArray()
-                    Extra = extra |> Seq.map (fun kv -> kv.Key, kv.Value) |> Map.ofSeq
-                }
+                let addListItem key value =
+                    let item = trimFrontmatterScalar value
+                    if not (String.IsNullOrWhiteSpace(item)) then
+                        let existing =
+                            match fields.TryGetValue(key) with
+                            | true, StringList values -> ResizeArray<string>(values)
+                            | true, Scalar existingValue when not (String.IsNullOrWhiteSpace(existingValue)) ->
+                                let items = ResizeArray<string>()
+                                items.Add(existingValue)
+                                items
+                            | _ -> ResizeArray<string>()
+
+                        existing.Add(item)
+                        fields.[key] <- StringList(existing.ToArray())
+
+                for rawLine in fmLines do
+                    let line = rawLine.TrimEnd()
+                    let trimmed = line.Trim()
+
+                    if String.IsNullOrWhiteSpace(trimmed) then
+                        pendingListKey <- None
+                    elif trimmed.StartsWith("#") then
+                        ()
+                    elif Char.IsWhiteSpace(rawLine, 0) then
+                        match pendingListKey with
+                        | Some key when trimmed.StartsWith("-") ->
+                            let item =
+                                if trimmed.StartsWith("- ") then trimmed.Substring(2)
+                                else trimmed.Substring(1)
+                            addListItem key item
+                        | _ -> ()
+                    else
+                        pendingListKey <- None
+                        let colonIdx = line.IndexOf(':')
+                        if colonIdx > 0 then
+                            let key = line.Substring(0, colonIdx).Trim().ToLowerInvariant()
+                            let value = line.Substring(colonIdx + 1).Trim()
+
+                            if String.IsNullOrWhiteSpace(value) then
+                                fields.[key] <- StringList [||]
+                                pendingListKey <- Some key
+                            elif (key = "tags" || key = "related") && (value.Contains(",") || value.Contains(";")) then
+                                fields.[key] <- StringList(parseInlineFrontmatterList value)
+                            elif value.StartsWith("[") && value.EndsWith("]") then
+                                fields.[key] <- StringList(parseInlineFrontmatterList value)
+                            else
+                                setScalar key value
+
+                let fm = fields |> Seq.map (fun kv -> kv.Key, kv.Value) |> Map.ofSeq |> frontmatterFromFields
                 Some fm, i + 2  // skip past closing ---
 
     /// Strip fenced code blocks (``` ... ```) to avoid extracting example links.

@@ -11,7 +11,7 @@ module FunctionStore =
         ReservedNames = FunctionStore.jsReservedNames + set [
             "catalog"; "search"; "context"; "expand"; "neighborhood"; "similar"
             "grep"; "mentions"; "files"; "backlinks"; "links"; "orphans"; "broken"
-            "placement"; "walk"; "novelty"; "cluster"; "gaps"; "hygiene"
+            "placement"; "walk"; "novelty"; "cluster"; "gaps"; "hygiene"; "prune"
             "changed"; "explain"
         ]
     }

@@ -58,26 +58,13 @@ cd parsers && npm install --legacy-peer-deps
 dotnet build
 ```
 
-### Contract verifier (developer)
+### Contract verification (developer)
 
-After building CodeSight from source, run the committed hostile temp-repo verifier:
-
-```powershell
-pwsh ./src/CodeSight/verify-contracts.ps1
-```
-
-What it proves:
-- inaccessible-subtree pruning for deeper valid glob excludes
-- bare-segment + built-in default exclude behavior
-- seeded stale-cache upgrade and partial-reindex `MaxChunkChars` repair for persisted `source-chunks.jsonl`
-- structural queries still load from `chunks.tsv` when `code.emb` / `summary.emb` are missing or corrupt
-- semantic queries stay explicitly degraded under damaged semantic artifacts and `--no-embed`
-- live `search()` query-embedding failures return explicit transport-specific error objects without mutating persisted index artifacts
-- explicit `--files` bypass and `index`/`preflight` discovery parity
-- read-only `preflight` against populated index trees
-- bounded `status` / `history` / `compare` viability
-- unchanged `semantic-state.json` schema
-- deterministic degraded-exit truth via a local embedding-failure harness
+CodeSight robustness is exercised with a hostile temp-repo verifier kept outside source control.
+That local harness covers exclude pruning, stale-cache upgrade/partial-reindex repair,
+structural-vs-semantic load boundaries, query-embedding failure handling, discovery parity,
+read-only preflight guarantees, bounded history/compare viability, and deterministic degraded-exit
+truth.
 - default/custom `indexDir` boundaries
 
 Use `-DllPath` if you want to point the verifier at a specific built `code-sight.dll`, and `-KeepTemp` if you want to inspect the temp repos after a failure.

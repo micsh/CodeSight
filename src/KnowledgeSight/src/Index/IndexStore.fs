@@ -15,6 +15,117 @@ module IndexStore =
         let hex = BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant()
         hex.Substring(0, 12)
 
+    let private frontmatterJsonPath (dir: string) =
+        Path.Combine(dir, "frontmatters.jsonl")
+
+    let private frontmatterTsvPath (dir: string) =
+        Path.Combine(dir, "frontmatters.tsv")
+
+    let private saveFrontmatters (dir: string) (frontmatters: Map<string, Frontmatter>) =
+        let esc (s: string) =
+            s.Replace("\t", " ").Replace("\n", " ").Replace("\r", "")
+
+        let jsonLines =
+            frontmatters
+            |> Map.toArray
+            |> Array.map (fun (filePath, frontmatter) ->
+                let fields =
+                    frontmatterFields frontmatter
+                    |> Map.toArray
+                    |> Array.map (fun (key, value) ->
+                        match value with
+                        | Scalar scalar ->
+                            {| key = key; kind = "scalar"; value = scalar; values = [||] |}
+                        | StringList values ->
+                            {| key = key; kind = "list"; value = ""; values = values |})
+
+                System.Text.Json.JsonSerializer.Serialize({| filePath = filePath; fields = fields |}))
+
+        File.WriteAllLines(frontmatterJsonPath dir, jsonLines)
+
+        let legacyLines =
+            frontmatters
+            |> Map.toArray
+            |> Array.map (fun (file, fm) ->
+                sprintf "%s\t%s\t%s\t%s\t%s\t%s"
+                    (esc file) (esc fm.Id) (esc fm.Title) (esc fm.Status)
+                    (fm.Tags |> String.concat ",") (fm.Related |> String.concat ","))
+
+        File.WriteAllLines(frontmatterTsvPath dir, legacyLines)
+
+    let private loadFrontmattersJson (path: string) =
+        try
+            let rows =
+                File.ReadAllLines(path)
+                |> Array.map (fun line ->
+                    use doc = System.Text.Json.JsonDocument.Parse(line)
+                    let root = doc.RootElement
+
+                    let filePath =
+                        match root.TryGetProperty("filePath") with
+                        | true, value -> value.GetString()
+                        | _ -> ""
+
+                    let fields =
+                        match root.TryGetProperty("fields") with
+                        | true, value when value.ValueKind = System.Text.Json.JsonValueKind.Array ->
+                            value.EnumerateArray()
+                            |> Seq.choose (fun item ->
+                                let key =
+                                    match item.TryGetProperty("key") with
+                                    | true, keyValue -> keyValue.GetString()
+                                    | _ -> ""
+
+                                if String.IsNullOrWhiteSpace(key) then None
+                                else
+                                    let kind =
+                                        match item.TryGetProperty("kind") with
+                                        | true, kindValue -> kindValue.GetString()
+                                        | _ -> "scalar"
+
+                                    let parsedValue =
+                                        if String.Equals(kind, "list", StringComparison.OrdinalIgnoreCase) then
+                                            let values =
+                                                match item.TryGetProperty("values") with
+                                                | true, valuesEl when valuesEl.ValueKind = System.Text.Json.JsonValueKind.Array ->
+                                                    valuesEl.EnumerateArray()
+                                                    |> Seq.map (fun v -> v.ToString())
+                                                    |> Seq.filter (String.IsNullOrWhiteSpace >> not)
+                                                    |> Seq.toArray
+                                                | _ -> [||]
+                                            StringList values
+                                        else
+                                            let scalar =
+                                                match item.TryGetProperty("value") with
+                                                | true, scalarEl -> scalarEl.ToString()
+                                                | _ -> ""
+                                            Scalar scalar
+
+                                    Some (key, parsedValue))
+                            |> Map.ofSeq
+                        | _ -> Map.empty
+
+                    if String.IsNullOrWhiteSpace(filePath) then
+                        invalidOp "frontmatters.jsonl row missing filePath"
+
+                    filePath, frontmatterFromFields fields)
+
+            Ok (rows |> Map.ofArray)
+        with ex ->
+            Error ex.Message
+
+    let private loadFrontmattersLegacy (path: string) =
+        File.ReadAllLines(path)
+        |> Array.choose (fun line ->
+            let p = line.Split('\t')
+            if p.Length >= 6 then
+                Some (p.[0], { Id = p.[1]; Title = p.[2]; Status = p.[3]
+                               Tags = p.[4].Split(',') |> Array.filter ((<>) "")
+                               Related = p.[5].Split(',') |> Array.filter ((<>) "")
+                               Extra = Map.empty })
+            else None)
+        |> Map.ofArray
+
     // ── Source chunk cache ──
 
     let saveSourceChunks (dir: string) (chunks: DocChunk[]) =
@@ -39,7 +150,7 @@ module IndexStore =
                     File.ReadAllLines(path)
                     |> Array.choose (fun line ->
                         try
-                            let doc = System.Text.Json.JsonDocument.Parse(line)
+                            use doc = System.Text.Json.JsonDocument.Parse(line)
                             let r = doc.RootElement
                             let str (p: string) = match r.TryGetProperty(p) with true, v -> v.GetString() | _ -> ""
                             let int' (p: string) = match r.TryGetProperty(p) with true, v -> v.GetInt32() | _ -> 0
@@ -104,12 +215,7 @@ module IndexStore =
         File.WriteAllLines(Path.Combine(dir, "links.tsv"), linkLines)
 
         // Save frontmatters
-        let fmLines =
-            index.Frontmatters |> Map.toArray |> Array.map (fun (file, fm) ->
-                sprintf "%s\t%s\t%s\t%s\t%s\t%s"
-                    (escape file) (escape fm.Id) (escape fm.Title) (escape fm.Status)
-                    (fm.Tags |> String.concat ",") (fm.Related |> String.concat ","))
-        File.WriteAllLines(Path.Combine(dir, "frontmatters.tsv"), fmLines)
+        saveFrontmatters dir index.Frontmatters
 
         eprintfn "  Index saved: %d chunks, %d links, %d docs with frontmatter → %s"
             index.Chunks.Length index.Links.Length index.Frontmatters.Count dir
@@ -144,17 +250,34 @@ module IndexStore =
                         else None)
                 else [||]
             let frontmatters =
-                let f = Path.Combine(dir, "frontmatters.tsv")
-                if File.Exists f then
-                    File.ReadAllLines(f) |> Array.choose (fun line ->
-                        let p = line.Split('\t')
-                        if p.Length >= 6 then
-                            Some (p.[0], { Id = p.[1]; Title = p.[2]; Status = p.[3]
-                                           Tags = p.[4].Split(',') |> Array.filter ((<>) "")
-                                           Related = p.[5].Split(',') |> Array.filter ((<>) "")
-                                           Extra = Map.empty })
-                        else None)
-                    |> Map.ofArray
+                let jsonPath = frontmatterJsonPath dir
+                let legacyPath = frontmatterTsvPath dir
+                if File.Exists jsonPath then
+                    match loadFrontmattersJson jsonPath with
+                    | Ok frontmatters when File.Exists legacyPath ->
+                        let legacy = loadFrontmattersLegacy legacyPath
+                        let missingLegacyKeys =
+                            legacy
+                            |> Map.toSeq
+                            |> Seq.map fst
+                            |> Seq.filter (fun key -> not (Map.containsKey key frontmatters))
+                            |> Seq.toArray
+
+                        if missingLegacyKeys.Length > 0 then
+                            eprintfn "  Warning: frontmatters.jsonl incomplete (%d missing rows); filling gaps from frontmatters.tsv" missingLegacyKeys.Length
+                            legacy
+                            |> Map.fold (fun acc key value ->
+                                if Map.containsKey key acc then acc
+                                else acc.Add(key, value)) frontmatters
+                        else
+                            frontmatters
+                    | Ok frontmatters -> frontmatters
+                    | Error error when File.Exists legacyPath ->
+                        eprintfn "  Warning: frontmatters.jsonl unreadable (%s); falling back to frontmatters.tsv" error
+                        loadFrontmattersLegacy legacyPath
+                    | Error _ -> Map.empty
+                elif File.Exists legacyPath then
+                    loadFrontmattersLegacy legacyPath
                 else Map.empty
             let dim = if embeddings.Length > 0 then embeddings.[0].Length else 0
             Some { Chunks = chunks; Embeddings = embeddings; Links = links

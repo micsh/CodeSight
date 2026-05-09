@@ -1,0 +1,21 @@
+ARCH: 0.4
+CONT: sightcore
+PATH: src/Sight.Core
+DEP:
+DESC: Shared runtime services for embeddings, query helpers, and user-defined functions
+
+MOD: embeddingservice
+  FILE: EmbeddingService.fs
+  OWN: embedding-http-client; embedding-probe
+  BND: Embedding transport only — no repo indexing, tool-specific query primitives, or CLI orchestration.
+
+MOD: functionstore
+  FILE: FunctionStore.fs
+  OWN: shared-function-definitions; function-name-validation; user-defined-function-persistence
+  BND: Function storage only — no query execution or tool-specific primitive registration.
+
+MOD: queryhelpers
+  FILE: QueryHelpers.fs
+  OWN: jint-helper-registration; ref-id-rewriting; eval-wrapping
+  BND: Shared query-engine helpers only — no tool-specific primitives or repository indexing.
+  DEP: sightcore/functionstore

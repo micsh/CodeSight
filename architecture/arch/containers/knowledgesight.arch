@@ -1,0 +1,43 @@
+ARCH: 0.4
+CONT: knowledgesight
+PATH: src/KnowledgeSight
+DEP: sightcore
+DESC: Markdown knowledge intelligence CLI for indexing docs and maintenance queries
+
+MOD: types
+  FILE: src/Types/Types.fs
+  OWN: document-index-types; link-types; frontmatter-types
+  BND: Shared document/query types only — no parsing, persistence, or CLI routing.
+
+MOD: config
+  FILE: src/Config/Config.fs
+  OWN: doc-directory-detection; knowledgesight-configuration; exclude-rules
+  BND: Configuration loading only — no markdown parsing, indexing, or query execution.
+
+MOD: services
+  FILE: src/Services/Services.fs
+  OWN: file-hashing; document-change-detection
+  BND: Indexing support only — no parsing, search semantics, or CLI routing.
+
+MOD: parsing
+  FILE: src/Parsing/MarkdownChunker.fs
+  OWN: markdown-chunking; frontmatter-parsing; link-extraction
+  BND: Markdown parsing only — no persistence, query evaluation, or CLI routing.
+
+MOD: index
+  FILE: src/Index/IndexStore.fs
+  OWN: document-index-persistence; source-chunk-cache; frontmatter-storage
+  BND: Index persistence only — no markdown parsing or CLI orchestration.
+  DEP: knowledgesight/types
+
+MOD: query
+  FILES: src/Query/Format.fs; src/Query/Primitives.fs; src/Query/FunctionStore.fs; src/Query/QueryEngine.fs
+  OWN: knowledge-query-primitives; query-engine; result-formatting; novelty-and-gap-analysis
+  BND: Query evaluation only — no markdown parsing or CLI argument parsing.
+  DEP: knowledgesight/index; knowledgesight/types; sightcore/embeddingservice; sightcore/functionstore; sightcore/queryhelpers
+
+MOD: cli
+  FILE: Program.fs
+  OWN: command-line-entrypoint; health-command-routing; indexing-and-query-orchestration
+  BND: CLI orchestration only — no persistence internals or query primitive definitions.
+  DEP: knowledgesight/config; knowledgesight/index; knowledgesight/parsing; knowledgesight/query; knowledgesight/services

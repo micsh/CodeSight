@@ -1,0 +1,60 @@
+ARCH: 0.4
+SYS: Sightline
+DESC: Code and knowledge intelligence CLIs with shared query/runtime services
+IGNORE: **/bin/**; **/obj/**; .agents/**; .code-intel/**; .knowledge-sight/**; .git/**
+
+GUIDE:
+  Before making code changes, read the relevant container .arch file.
+  Keep the first module cut aligned to compile/layout seams unless the code proves a finer split.
+  Update ownership and dependencies when a change shifts a module boundary or shared contract.
+ENDGUIDE
+
+CONT: codesight
+CONT: knowledgesight
+CONT: sightcore
+
+RULE: sightcore-independence
+  TYPE: no_dependency
+  FROM: sightcore
+  TO: codesight; knowledgesight
+  WHY: Shared runtime helpers must remain reusable and tool-agnostic.
+
+RULE: codesight-no-knowledgesight-dependency
+  TYPE: no_dependency
+  FROM: codesight
+  TO: knowledgesight
+  WHY: CodeSight may read KnowledgeSight indexes as peer data, but it must not take a compile-time dependency on the KnowledgeSight tool.
+
+RULE: knowledgesight-no-codesight-dependency
+  TYPE: no_dependency
+  FROM: knowledgesight
+  TO: codesight
+  WHY: KnowledgeSight should stay independent of CodeSight-specific code.
+
+STORY: codesight-index-parse
+  DESC: CodeSight index command routes source files into the tree-sitter parsing pipeline
+  FLOW: codesight/cli; codesight/parsing
+
+STORY: codesight-index-store
+  DESC: CodeSight index command persists the rebuilt code index
+  FLOW: codesight/cli; codesight/index
+
+STORY: codesight-search
+  DESC: CodeSight search/eval command routes into the query subsystem
+  FLOW: codesight/cli; codesight/query
+
+STORY: knowledgesight-index-parse
+  DESC: KnowledgeSight index command routes markdown files into the markdown parser
+  FLOW: knowledgesight/cli; knowledgesight/parsing
+
+STORY: knowledgesight-index-store
+  DESC: KnowledgeSight index command persists the rebuilt document index
+  FLOW: knowledgesight/cli; knowledgesight/index
+
+STORY: knowledgesight-query-check
+  DESC: KnowledgeSight search/check query paths route into the query subsystem
+  FLOW: knowledgesight/cli; knowledgesight/query
+
+STORY: knowledgesight-health
+  DESC: KnowledgeSight health and stale commands load the persisted document index for analysis
+  FLOW: knowledgesight/cli; knowledgesight/index
